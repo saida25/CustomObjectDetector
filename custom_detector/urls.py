@@ -19,4 +19,16 @@ from django.urls import path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+     path('', include('detector_app.urls')),
+]
+# detector_app/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.home, name='home'),
+    path('train/', views.train_model, name='train_model'),
+    path('detect/', views.detect_objects, name='detect_objects'),
+    path('results/<int:detection_id>/', views.detection_results, name='detection_results'),
+    path('status/<int:session_id>/', views.training_status, name='training_status'),
 ]
