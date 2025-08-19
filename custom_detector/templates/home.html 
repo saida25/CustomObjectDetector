@@ -1,0 +1,199 @@
+<!-- templates/home.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Custom Object Detector</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .section { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background-color: #4CAF50; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        .training-sessions, .detection-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .session-card, .result-card { border: 1px solid #ddd; padding: 15px; border-radius: 4px; }
+        .loading { display: none; text-align: center; }
+        .progress-bar { width: 100%; background-color: #f0f0f0; border-radius: 4px; }
+        .progress { height: 20px; background-color: #4CAF50; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Custom Object Detector</h1>
+        
+        <!-- Training Section -->
+        <div class="section">
+            <h2>Train New Model</h2>
+            <form id="training-form" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="model_name">Model Name:</label>
+                    <input type="text" id="model_name" name="model_name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="classes">Classes (comma-separated):</label>
+                    <input type="text" id="classes" name="classes" placeholder="cat,dog,person" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="images">Training Images:</label>
+                    <input type="file" id="images" name="images" multiple accept="image/*" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="annotations">Annotation Files (YOLO format, optional):</label>
+                    <input type="file" id="annotations" name="annotations" multiple>
+                    <small>If you don't have annotations, the system will use a basic object detection model</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="epochs">Epochs:</label>
+                    <input type="number" id="epochs" name="epochs" value="50" min="1" max="1000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="batch_size">Batch Size:</label>
+                    <input type="number" id="batch_size" name="batch_size" value="16" min="1" max="64">
+                </div>
+                
+                <button type="submit">Start Training</button>
+            </form>
+            
+            <div class="loading" id="training-loading">
+                <p>Training model... This may take several minutes to hours depending on your dataset size.</p>
+                <div class="progress-bar">
+                    <div class="progress" id="training-progress"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Detection Section -->
+        <div class="section">
+            <h2>Detect Objects</h2>
+            <form id="detection-form" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="session-select">Select Model:</label>
+                    <select id="session-select" name="session_id" required>
+                        <option value="">-- Select a trained model --</option>
+                        {% for session in sessions %}
+                            {% if session.status == 'completed' %}
+                                <option value="{{ session.id }}">{{ session.model_name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="detect-image">Image to Analyze:</label>
+                    <input type="file" id="detect-image" name="image" accept="image/*" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confidence">Confidence Threshold (0-1):</label>
+                    <input type="number" id="confidence" name="confidence" value="0.5" min="0" max="1" step="0.1">
+                </div>
+                
+                <button type="submit">Detect Objects</button>
+            </form>
+            
+            <div class="loading" id="detection-loading">
+                <p>Detecting objects...</p>
+            </div>
+            
+            <div id="detection-results"></div>
+        </div>
+        
+        <!-- Training Sessions -->
+        <div class="section">
+            <h2>Your Training Sessions</h2>
+            <div class="training-sessions">
+                {% for session in sessions %}
+                    <div class="session-card">
+                        <h3>{{ session.model_name }}</h3>
+                        <p>Status: {{ session.status }}</p>
+                        <p>Classes: {{ session.classes|join:", " }}</p>
+                        <p>Created: {{ session.created_at }}</p>
+                        {% if session.status == 'completed' %}
+                            <p>Accuracy: {{ session.accuracy|default:"N/A" }}</p>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <p>No training sessions yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Training form submission
+        document.getElementById('training-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const loading = document.getElementById('training-loading');
+            loading.style.display = 'block';
+            
+            fetch('/train/', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Training started successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                    loading.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+                loading.style.display = 'none';
+            });
+        });
+        
+        // Detection form submission
+        document.getElementById('detection-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const loading = document.getElementById('detection-loading');
+            const results = document.getElementById('detection-results');
+            loading.style.display = 'block';
+            results.innerHTML = '';
+            
+            fetch('/detect/', {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                
+                if (data.success) {
+                    results.innerHTML = `
+                        <h3>Detection Results</h3>
+                        <p>Found ${data.detections.length} objects</p>
+                        <img src="${data.result_url}" style="max-width: 100%;">
+                        <ul>
+                            ${data.detections.map(d => `<li>${d.class} (${(d.confidence * 100).toFixed(2)}%)</li>`).join('')}
+                        </ul>
+                    `;
+                } else {
+                    results.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                results.innerHTML = `<p class="error">Error: ${error}</p>`;
+            });
+        });
+    </script>
+</body>
+</html>
